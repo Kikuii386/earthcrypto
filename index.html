@@ -602,7 +602,11 @@ async function enrichWithPrices(data) {
     // fetch ขนานในแต่ละ batch
     const fetches = chunk.map(async row => {
       try {
+<<<<<<< HEAD
         const url = `api/dexscreener?contract=${row.contract}`;
+=======
+        const url = `https://dexscreener-proxy.kee-maharaja.workers.dev/?contract=${row.contract}`;
+>>>>>>> 488ab61229f1e7623e9067562e5d4cbd4fa2df21
         const res = await fetch(url);
         const json = await res.json();
         const info = json.pairs?.[0];
@@ -647,7 +651,11 @@ async function refreshPrices() {
   for (let row of allData) {
     try {
       if (!row.contract) continue; // <--- เพิ่มบรรทัดนี้
+<<<<<<< HEAD
       const url = `api/dexscreener?contract=${row.contract}`;
+=======
+      const url = `https://dexscreener-proxy.kee-maharaja.workers.dev/?contract=${row.contract}`;
+>>>>>>> 488ab61229f1e7623e9067562e5d4cbd4fa2df21
       const res = await fetch(url);
       const json = await res.json();
       const info = json.pairs?.[0];
