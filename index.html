@@ -556,6 +556,10 @@ const sheetUrl = 'https://docs.google.com/spreadsheets/d/154YVMJYcJ8_5q_hNknll3X
     let currentType = 'total';
     let oldPrices = {};
 
+    function safeId(contract) {
+    return contract.replace(/[^a-zA-Z0-9\-_:.]/g, '_');
+  }
+
     function fetchDataForType(type) {
     if (type === 'high') return allData.filter(row => row.highInv > 0);
     if (type === 'low') return allData.filter(row => row.lowInv > 0);
@@ -584,7 +588,13 @@ const sheetUrl = 'https://docs.google.com/spreadsheets/d/154YVMJYcJ8_5q_hNknll3X
         totalEntry: parseFloat(r.c[11]?.v || 0),
         totalQty: parseFloat(r.c[12]?.v || 0),
         totalInv: parseFloat(r.c[13]?.v || 0),
-      })).filter(t => t.contract);
+      })).filter(t =>
+          t.contract && (
+          t.highInv > 0 ||
+          t.lowInv > 0 ||
+          t.totalInv > 0
+        )
+    );
     }
 
 async function enrichWithPrices(data) {
@@ -602,7 +612,7 @@ async function enrichWithPrices(data) {
     // fetch ขนานในแต่ละ batch
     const fetches = chunk.map(async row => {
       try {
-        const url = `https://dexscreener-proxy.kee-maharaja.workers.dev/?contract=${row.contract}`;
+        const url = `/api/dexscreener?contract=${row.contract}`;
         const res = await fetch(url);
         const json = await res.json();
         const info = json.pairs?.[0];
@@ -644,18 +654,25 @@ async function enrichWithPrices(data) {
 }
 
 async function refreshPrices() {
-  for (let row of allData) {
+  console.log('refreshPrices called');
+  // Debug log รายชื่อ contract ที่จะอัปเดตราคา
+  console.log('refreshPrices: contracts =', fetchDataForType(currentType).map(r => r.contract));
+  for (let row of fetchDataForType(currentType)) {
     try {
-      if (!row.contract) continue; // <--- เพิ่มบรรทัดนี้
-      const url = `https://dexscreener-proxy.kee-maharaja.workers.dev/?contract=${row.contract}`;
+      if (!row.contract) continue;
+      const url = `/api/dexscreener?contract=${row.contract}`;
       const res = await fetch(url);
       const json = await res.json();
       const info = json.pairs?.[0];
       if (!info) continue;
 
       const newPrice = parseFloat(info.priceUsd);
-      const tr = document.getElementById(row.contract);
-      if (!tr) continue;
+      // ไม่จำเป็นต้องเช็ค tr = document.getElementById(...) ซ้ำซ้อน เพราะ filter แล้ว
+      const tr = document.getElementById(safeId(row.contract));
+      if (!tr) {
+        console.warn('ไม่พบ tr สำหรับ contract:', row.contract, 'ใช้ id:', safeId(row.contract));
+        continue;
+      }
 
       // ใช้ข้อมูล icon/symbol เดิมจาก allData
       const entry = currentType === 'high' ? row.highEntry : currentType === 'low' ? row.lowEntry : row.totalEntry;
@@ -694,23 +711,20 @@ async function refreshPrices() {
           currentType = 'total';
           await enrichWithPrices(rawData);
           updateCounts(allData);
-          
-          console.log('จำนวน allData หลังเชื่อมราคาจาก DexScreener =', allData.length);
-
-          updateCounts(allData);
-          console.log('High items:', allData.filter(d => d.highInv > 0).map(d => d.name));
-          console.log('Low items:', allData.filter(d => d.lowInv > 0).map(d => d.name));
-          console.log('Total items:', allData.filter(d => d.totalInv > 0).map(d => d.name));
 
           allData.forEach(row => oldPrices[row.contract] = row.currentPrice);
+
+          await refreshPrices();
+
+          setInterval(refreshPrices, 10000); // อัปเดตราคาใหม่ทุก 10 วินาที
           
+          console.log('จำนวน allData หลังเชื่อมราคาจาก DexScreener =', allData.length);
+          updateCounts(allData);
+          console.log('High items:', allData.filter(d => d.highInv > 0).map(d => d.name));
+          console.log('Low items:', allData.filter(d => d.lowInv > 0).map(d => d.name));         
+          console.log('Total items:', allData.filter(d => d.totalInv > 0).map(d => d.name));
 
-      document.getElementById('portfolioSelect').addEventListener('change', e => {
-        currentType = e.target.value;
-        renderRows(allData, currentType);
-      });
-
-      setInterval(refreshPrices, 10000);  // ⬅️ ปิดฟังก์ชัน main ตรงนี้
+ // ⬅️ ปิดฟังก์ชัน main ตรงนี้
     } // ✅ ปิด main
 
   function showLoading() {
@@ -736,9 +750,7 @@ async function refreshPrices() {
       const low = data.filter(d => d.lowInv > 0);
       const total = data.filter(d => d.totalInv > 0);
 
-      document.getElementById('portfolioSelect').options[0].textContent = `HIGH (${high.length})`;
-      document.getElementById('portfolioSelect').options[1].textContent = `LOW (${low.length})`;
-      document.getElementById('portfolioSelect').options[2].textContent = `TOTAL (${total.length})`;
+
     }
 
     main();  // ⬅️ อยู่นอกฟังก์ชันทั้งหมด
@@ -833,7 +845,7 @@ function renderRows(data, type) {
     const allocation = totalValue > 0 ? (value / totalValue) * 100 : 0;
 
     const tr = document.createElement('tr');
-    tr.setAttribute('id', row.contract);
+    tr.setAttribute('id', safeId(row.contract));
     tr.className = 'hover:bg-earth-cream/30 transition';
 const profitAmount = (value - inv); // inv คือเงินต้น, value คือมูลค่าปัจจุบัน
 const profitAmountClass = 'text-gray-500'; 
